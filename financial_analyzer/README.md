@@ -67,6 +67,7 @@ financial_analyzer/
 ├── tests/
 │   ├── conftest.py         # Pytest fixtures
 │   ├── test_data_fetcher.py # Ingestion & series extraction tests
+│   ├── test_database.py    # SQLite persistence & serialization tests
 │   ├── test_processor.py   # Technical indicator & fundamental ratio tests
 │   └── test_signals.py     # Crossover detection tests
 ├── config.yaml.example     # Configuration template
@@ -81,13 +82,20 @@ financial_analyzer/
 ### 🔧 Prerequisites
 
 - **Python 3.12+**
-- **[uv](https://docs.astral.sh/uv/)** (Fast Python package manager)
+- **[uv](https://docs.astral.sh/uv/)** or **pip**
 
 ### 📦 Installation
 
+Option 1: Using `uv` (Recommended)
 ```bash
-# Install dependencies using uv
 uv sync
+```
+
+Option 2: Using standard `pip` / `venv`
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -e . pytest ruff
 ```
 
 ### ⚙️ Configuration Setup
@@ -120,14 +128,31 @@ Run the analysis pipeline using the CLI for any supported ticker:
 
 ```bash
 # Analyze a US Technology Stock (NVIDIA)
-uv run python -m src.main run --ticker NVDA --output nvda_analysis.json
+python -m src.main run --ticker NVDA --output nvda_analysis.json
 
 # Analyze an Indian Equities Stock (Reliance Industries)
-uv run python -m src.main run --ticker RELIANCE.NS --output reliance_analysis.json
+python -m src.main run --ticker RELIANCE.NS --output reliance_analysis.json
 
 # Analyze a Recent IPO Stock (Swiggy)
-uv run python -m src.main run --ticker SWIGGY.NS --output swiggy_analysis.json
+python -m src.main run --ticker SWIGGY.NS --output swiggy_analysis.json
 ```
+
+### 📋 CLI Command Options
+
+| Option | Type | Default | Description |
+| :--- | :--- | :--- | :--- |
+| `--ticker` | `TEXT` | *(Required)* | Stock ticker symbol (e.g., `NVDA`, `AAPL`, `RELIANCE.NS`) |
+| `--output` | `TEXT` | `analysis.json` | Output path for exported JSON summary report |
+| `--initdb` / `--no-initdb` | `BOOL` | `True` | Automatically initialize SQLite database tables before execution |
+
+### 🧩 Core Modules Overview
+
+- **`src.config`**: Loads settings from `config.yaml` with built-in default fallbacks.
+- **`src.data_fetcher`**: Wraps `yfinance` to fetch OHLCV history and execute multi-tier balance sheet fallback strategies.
+- **`src.processor`**: Aligns prices with fundamentals via `merge_asof`, computes 50/200-day SMAs, 52-week drawdowns, BVPS, P/B, and EV.
+- **`src.signals`**: Detects vectorized **Golden Cross** and **Death Cross** signals.
+- **`src.database`**: Manages SQLAlchemy schema and idempotent SQLite storage using `INSERT OR REPLACE`.
+- **`src.models`**: Pydantic v2 schemas for data validation and export payloads.
 
 ---
 
@@ -180,16 +205,16 @@ Stores detected trading crossover events.
 
 ## 🧪 Testing & Code Quality
 
-Run automated unit tests:
+Run automated unit test suite (8 tests covering data fetcher, processor, signals, and SQLite database):
 
 ```bash
-uv run pytest
+pytest
 ```
 
 Check code style and linting with Ruff:
 
 ```bash
-uv run ruff check .
+ruff check .
 ```
 
 ---

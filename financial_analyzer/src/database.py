@@ -9,7 +9,6 @@ import sqlalchemy as sa
 from sqlalchemy.orm import declarative_base
 from sqlalchemy import Column, Integer, String, Float, Date, Text, DateTime
 import pandas as pd
-import numpy as np
 from datetime import datetime, timezone
 import logging
 from .config import load_config
@@ -81,7 +80,7 @@ def save_daily_metrics(df: pd.DataFrame, engine=None):
 
     df2 = df.copy()
     if "date" in df2.columns:
-        df2["date"] = pd.to_datetime(df2["date"]).dt.date
+        df2["date"] = pd.to_datetime(df2["date"], errors="coerce").dt.date
 
     cols = ["ticker", "date", "open", "high", "low", "close", "volume",
             "sma50", "sma200", "price_to_book", "bvps", "enterprise_value"]
@@ -94,7 +93,7 @@ def save_daily_metrics(df: pd.DataFrame, engine=None):
 
     cleaned_records = []
     for r in records:
-        cleaned = {k: (None if (isinstance(v, float) and np.isnan(v)) else v) for k, v in r.items()}
+        cleaned = {k: (None if pd.isna(v) else v) for k, v in r.items()}
         cleaned_records.append(cleaned)
 
     with conn.begin():
@@ -116,8 +115,12 @@ def save_signal_events(ticker: str, events: Iterable[dict], engine=None):
             if not isinstance(ev, dict):
                 continue
             d = ev.get("date")
-            if isinstance(d, str):
-                d = pd.to_datetime(d).date()
+            if d is not None:
+                parsed_d = pd.to_datetime(d, errors="coerce")
+                if pd.notna(parsed_d):
+                    d = parsed_d.date()
+                else:
+                    d = None
             ttype = ev.get("signal_type")
             meta = str(ev.get("meta", {}))
             sql = 'INSERT OR REPLACE INTO signal_events (ticker, date, signal_type, meta) VALUES (:ticker, :date, :signal_type, :meta)'

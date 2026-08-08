@@ -1,4 +1,5 @@
 # tests/test_processor.py
+import pandas as pd
 from src.processor import process_data
 from decimal import Decimal
 
@@ -31,4 +32,15 @@ def test_process_fundamentals(simple_price_df):
     assert (out["bvps"] == 50.0).all()
     # enterprise value should be 1000000 + 100000 - 50000 = 1050000.0
     assert (out["enterprise_value"] == 1050000.0).all()
+
+
+def test_process_with_invalid_and_tz_dates(simple_price_df):
+    df_copy = simple_price_df.copy()
+    # insert a timezone-aware date and an invalid date
+    df_copy["date"] = pd.date_range("2023-01-01", periods=len(df_copy), tz="UTC")
+    df_copy.loc[0, "date"] = pd.NaT
+    raw = {"ticker": "TZ_TEST", "prices": df_copy, "fundamentals": [], "source_info": {}}
+    out = process_data(raw)
+    assert len(out) == len(simple_price_df) - 1
+    assert out["date"].dt.tz is None
 

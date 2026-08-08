@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 def _normalize_date_series(s: pd.Series) -> pd.Series:
     """Safely convert DatetimeSeries to timezone-naive pandas datetime."""
     dt = pd.to_datetime(s, errors="coerce")
-    if getattr(dt.dt, "tz", None) is not None:
+    if hasattr(dt, "dt") and getattr(dt.dt, "tz", None) is not None:
         return dt.dt.tz_convert(None)
     return dt
 
@@ -39,7 +39,7 @@ def process_data(raw_data: Dict[str, Any]) -> pd.DataFrame:
 
     # Store normalized naive dates for internal calculations
     prices_df["date"] = _normalize_date_series(prices_df["date"])
-    prices_df = prices_df.sort_values("date").reset_index(drop=True)
+    prices_df = prices_df.dropna(subset=["date"]).sort_values("date").reset_index(drop=True)
 
     # Standardize price column names
     for col in ("open", "high", "low", "close", "adj_close", "volume"):
@@ -69,6 +69,7 @@ def process_data(raw_data: Dict[str, Any]) -> pd.DataFrame:
     if fundamentals:
         fdf = pd.DataFrame(fundamentals)
         fdf["as_of"] = _normalize_date_series(fdf["as_of"])
+        fdf = fdf.dropna(subset=["as_of"])
         
         for col in fundamental_cols:
             if col in fdf.columns:
@@ -78,22 +79,26 @@ def process_data(raw_data: Dict[str, Any]) -> pd.DataFrame:
 
         fdf = fdf.sort_values("as_of").drop_duplicates("as_of", keep="last")
 
-        merge_left = prices_df[["date"]].copy().sort_values("date")
-        fdf_for_merge = fdf[["as_of"] + fundamental_cols].copy().sort_values("as_of")
+        if not fdf.empty and not prices_df.empty:
+            merge_left = prices_df[["date"]].copy().sort_values("date")
+            fdf_for_merge = fdf[["as_of"] + fundamental_cols].copy().sort_values("as_of")
 
-        merged = pd.merge_asof(
-            merge_left,
-            fdf_for_merge,
-            left_on="date",
-            right_on="as_of",
-            direction="backward",
-        )
+            merged = pd.merge_asof(
+                merge_left,
+                fdf_for_merge,
+                left_on="date",
+                right_on="as_of",
+                direction="backward",
+            )
 
-        for col in fundamental_cols:
-            prices_df[col] = merged[col].values
+            for col in fundamental_cols:
+                prices_df[col] = merged[col].values
 
-        # Forward fill and backfill remaining values across daily dates
-        prices_df[fundamental_cols] = prices_df[fundamental_cols].ffill().bfill()
+            # Forward fill and backfill remaining values across daily dates
+            prices_df[fundamental_cols] = prices_df[fundamental_cols].ffill().bfill()
+        else:
+            for col in fundamental_cols:
+                prices_df[col] = np.nan
     else:
         for col in fundamental_cols:
             prices_df[col] = np.nan

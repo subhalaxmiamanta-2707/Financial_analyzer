@@ -25,8 +25,8 @@ def detect_golden_crossover(df: pd.DataFrame, sma50_col: str = "sma50", sma200_c
     s200 = df[sma200_col]
 
     cond = (s50 > s200) & (s50.shift(1) <= s200.shift(1))
-    dates = df.loc[cond, "date"].dt.date.astype(str).tolist()
-    return dates
+    dates = pd.to_datetime(df.loc[cond, "date"], errors="coerce").dt.date.astype(str).tolist()
+    return [d for d in dates if d and d != "NaT"]
 
 
 def detect_death_cross(df: pd.DataFrame, sma50_col: str = "sma50", sma200_col: str = "sma200") -> List[str]:
@@ -36,5 +36,5 @@ def detect_death_cross(df: pd.DataFrame, sma50_col: str = "sma50", sma200_col: s
     s50 = df[sma50_col]
     s200 = df[sma200_col]
     cond = (s50 < s200) & (s50.shift(1) >= s200.shift(1))
-    dates = df.loc[cond, "date"].dt.date.astype(str).tolist()
-    return dates
+    dates = pd.to_datetime(df.loc[cond, "date"], errors="coerce").dt.date.astype(str).tolist()
+    return [d for d in dates if d and d != "NaT"]

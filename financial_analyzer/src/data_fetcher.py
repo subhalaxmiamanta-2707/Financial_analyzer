@@ -10,6 +10,7 @@ import yfinance as yf
 from datetime import datetime, timezone
 from decimal import Decimal
 import pandas as pd
+import numpy as np
 from .models import FundamentalsQuarter
 from .config import load_config
 
@@ -18,7 +19,16 @@ CONFIG = load_config()
 
 
 def _decimal_or_none(x) -> Decimal | None:
-    if x is None or pd.isna(x):
+    if x is None:
+        return None
+    if isinstance(x, (pd.Series, np.ndarray)):
+        if len(x) == 0:
+            return None
+        valid = [item for item in x if pd.notna(item)]
+        if not valid:
+            return None
+        x = valid[0]
+    if pd.isna(x):
         return None
     try:
         return Decimal(str(x))
@@ -32,10 +42,9 @@ def _get_series_val(col_data: pd.Series, keys: List[str]) -> Decimal | None:
     for k in keys:
         if k in col_data.index:
             val = col_data[k]
-            if pd.notna(val):
-                res = _decimal_or_none(val)
-                if res is not None:
-                    return res
+            res = _decimal_or_none(val)
+            if res is not None:
+                return res
     return None
 
 
@@ -98,8 +107,16 @@ def fetch_stock_data(ticker: str, period: str | None = None) -> Dict[str, Any]:
     if prices is None or prices.empty:
         raise ValueError(f"No price data returned for ticker '{ticker}'")
 
+    if isinstance(prices.columns, pd.MultiIndex):
+        prices.columns = prices.columns.get_level_values(0)
+
     prices = prices.rename_axis("date").reset_index()
-    prices.columns = [c.lower().replace(" ", "_") for c in prices.columns]
+    new_cols = []
+    for c in prices.columns:
+        if isinstance(c, tuple):
+            c = c[0]
+        new_cols.append(str(c).lower().replace(" ", "_"))
+    prices.columns = new_cols
 
     # Fetch info once for supplemental fallback values
     info = {}
